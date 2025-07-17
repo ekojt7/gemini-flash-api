@@ -134,3 +134,58 @@ app.post("/generate-from-image", upload.single("image"), async (req, res) => {
     }
   }
 });
+
+app.post(
+  "/generate-from-document",
+  upload.single("document"),
+  async (req, res) => {
+    // Mendapatkan path file yang diunggah oleh Multer
+    const filePath = req.file.path;
+
+    // Memastikan ada file yang diunggah
+    if (!req.file) {
+      return res.status(400).json({ error: "No document file uploaded." });
+    }
+
+    try {
+      // Membaca konten file yang diunggah
+      const buffer = fs.readFileSync(filePath);
+      // Mengonversi buffer ke string Base64
+      const base64Data = buffer.toString("base64");
+      // Mendapatkan MIME type dari file yang diunggah
+      const mimeType = req.file.mimetype;
+
+      // Membuat bagian dokumen dalam format yang dapat diterima Gemini API
+      const documentPart = {
+        inlineData: {
+          data: base64Data,
+          mimeType: mimeType,
+        },
+      };
+
+      // Mengirimkan prompt dan bagian dokumen ke model Gemini
+      // Anda bisa mengganti 'Analyze this document:' dengan prompt yang lebih spesifik
+      const result = await model.generateContent([
+        "Analyze this document:",
+        documentPart,
+      ]);
+
+      // Mendapatkan respons dari hasil generasi
+      const response = await result.response;
+
+      // Mengirimkan teks hasil analisis sebagai respons JSON
+      res.json({ output: response.text() });
+    } catch (error) {
+      // Menangkap error jika terjadi dan mengirimkan status 500 (Internal Server Error)
+      console.error("Error generating from document:", error); // Log error untuk debugging
+      res.status(500).json({ error: error.message });
+    } finally {
+      // Pastikan file yang diunggah dihapus setelah selesai, terlepas dari sukses atau gagal
+      if (req.file) {
+        // Pastikan req.file ada sebelum mencoba menghapus
+        fs.unlinkSync(filePath);
+        console.log(`Deleted uploaded document: ${filePath}`);
+      }
+    }
+  }
+);
