@@ -189,3 +189,49 @@ app.post(
     }
   }
 );
+
+app.post("/generate-from-audio", upload.single("audio"), async (req, res) => {
+  // Memastikan ada file yang diunggah
+  if (!req.file) {
+    return res.status(400).json({ error: "No audio file uploaded." });
+  }
+
+  // Mendapatkan buffer audio dari file yang diunggah oleh Multer
+  const audioBuffer = fs.readFileSync(req.file.path);
+  // Mengonversi buffer audio ke string Base64
+  const base64Audio = audioBuffer.toString("base64");
+
+  // Membuat bagian audio dalam format yang dapat diterima Gemini API
+  const audioPart = {
+    inlineData: {
+      data: base64Audio,
+      mimeType: req.file.mimetype, // Menggunakan MIME type yang terdeteksi Multer
+    },
+  };
+
+  try {
+    // Mengirimkan prompt dan bagian audio ke model Gemini
+    // Anda bisa mengganti 'Transcribe or analyze the following audio:' dengan prompt yang lebih spesifik
+    const result = await model.generateContent([
+      "Transcribe or analyze the following audio:",
+      audioPart,
+    ]);
+
+    // Mendapatkan respons dari hasil generasi
+    const response = await result.response;
+
+    // Mengirimkan teks hasil analisis sebagai respons JSON
+    res.json({ output: response.text() });
+  } catch (error) {
+    // Menangkap error jika terjadi dan mengirimkan status 500 (Internal Server Error)
+    console.error("Error generating from audio:", error); // Log error untuk debugging
+    res.status(500).json({ error: error.message });
+  } finally {
+    // Pastikan file yang diunggah dihapus setelah selesai, terlepas dari sukses atau gagal
+    if (req.file) {
+      // Pastikan req.file ada sebelum mencoba menghapus
+      fs.unlinkSync(req.file.path);
+      console.log(`Deleted uploaded audio: ${req.file.path}`);
+    }
+  }
+});
