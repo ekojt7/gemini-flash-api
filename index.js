@@ -30,3 +30,34 @@ const PORT = 3000;
 app.listen(PORT, () => {
   console.log(`Gemini API server is running at http://localhost:${PORT}`);
 });
+
+// Anda akan menambahkan kode ini di file index.js Anda,
+// setelah inisialisasi 'app' dan 'model'
+
+app.post("/generate-text", async (req, res) => {
+  // Mengekstrak 'prompt' dari body permintaan (request body)
+  // Misalnya, jika permintaan JSON adalah { "prompt": "Tuliskan puisi tentang laut" }
+  const { prompt } = req.body;
+
+  // Memastikan prompt ada
+  if (!prompt) {
+    return res
+      .status(400)
+      .json({ error: "Prompt is required in the request body." });
+  }
+
+  try {
+    // Mengirim prompt ke model Gemini untuk menghasilkan konten
+    const result = await model.generateContent(prompt);
+
+    // Mendapatkan respons dari hasil generasi
+    const response = await result.response;
+
+    // Mengirimkan teks hasil generasi sebagai respons JSON
+    res.json({ output: response.text() });
+  } catch (error) {
+    // Menangkap error jika terjadi dan mengirimkan status 500 (Internal Server Error)
+    console.error("Error generating text:", error); // Log error untuk debugging
+    res.status(500).json({ error: error.message });
+  }
+});
