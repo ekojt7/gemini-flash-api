@@ -26,6 +26,44 @@ const upload = multer({ dest: "uploads/" });
 // Define the port for the server to listen on
 const PORT = 3000;
 
+// Fungsi helper untuk mengonversi path file gambar menjadi bagian generatif
+// yang dapat dikirim ke Gemini API.
+function imageToGenerativePart(imagePath, mimeType = null) {
+  // Jika mimeType tidak disediakan, coba tebak dari ekstensi file
+  if (!mimeType) {
+    const ext = path.extname(imagePath).toLowerCase();
+    switch (ext) {
+      case ".jpeg":
+      case ".jpg":
+        mimeType = "image/jpeg";
+        break;
+      case ".png":
+        mimeType = "image/png";
+        break;
+      case ".gif":
+        mimeType = "image/gif";
+        break;
+      case ".webp":
+        mimeType = "image/webp";
+        break;
+      default:
+        // Default ke jpeg jika tidak dikenal, atau berikan error
+        console.warn(
+          `Unknown image type for extension: ${ext}. Defaulting to image/jpeg.`
+        );
+        mimeType = "image/jpeg";
+        break;
+    }
+  }
+
+  return {
+    inlineData: {
+      data: Buffer.from(fs.readFileSync(imagePath)).toString("base64"),
+      mimeType,
+    },
+  };
+}
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Gemini API server is running at http://localhost:${PORT}`);
@@ -59,5 +97,40 @@ app.post("/generate-text", async (req, res) => {
     // Menangkap error jika terjadi dan mengirimkan status 500 (Internal Server Error)
     console.error("Error generating text:", error); // Log error untuk debugging
     res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/generate-from-image", upload.single("image"), async (req, res) => {
+  // Mendapatkan prompt dari body permintaan, atau menggunakan default 'Describe the image'
+  const prompt = req.body.prompt || "Describe the image";
+
+  // Memastikan ada file yang diunggah
+  if (!req.file) {
+    return res.status(400).json({ error: "No image file uploaded." });
+  }
+
+  // Mengubah file yang diunggah menjadi format yang dapat digunakan oleh Gemini API
+  const image = imageToGenerativePart(req.file.path, req.file.mimetype);
+
+  try {
+    // Mengirimkan prompt dan gambar ke model Gemini
+    const result = await model.generateContent([prompt, image]);
+
+    // Mendapatkan respons dari hasil generasi
+    const response = await result.response;
+
+    // Mengirimkan teks hasil generasi sebagai respons JSON
+    res.json({ output: response.text() });
+  } catch (error) {
+    // Menangkap error jika terjadi dan mengirimkan status 500 (Internal Server Error)
+    console.error("Error generating from image:", error); // Log error untuk debugging
+    res.status(500).json({ error: error.message });
+  } finally {
+    // Pastikan file yang diunggah dihapus setelah selesai, terlepas dari sukses atau gagal
+    if (req.file) {
+      // Pastikan req.file ada sebelum mencoba menghapus
+      fs.unlinkSync(req.file.path);
+      console.log(`Deleted uploaded file: ${req.file.path}`);
+    }
   }
 });
